@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 貼った Config をどこにも送らないことを、ブラウザ側で強制する（通信・画像・フォーム送信を禁止） -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; img-src 'none'; form-action 'none'; frame-src 'none'">
+<title>netkit — ACL とコンフィグ差分の道具</title>
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --ink:#1f2a26; --sub:#5b6660; --line:#dcdfdc; --accent:#2f7a55; --add:#e5f4ea; --del:#fbe9e7; --chg:#fff5d6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#151917; --card:#1e2421; --ink:#e6ebe8; --sub:#9aa6a0; --line:#34403a; --accent:#6cc494; --add:#1f3a2a; --del:#43241f; --chg:#3d3518; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--ink); font:15px/1.6 -apple-system, "Hiragino Sans", sans-serif; }
+  main { max-width:1040px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .lead { color:var(--sub); margin:0 0 20px; }
+  nav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  nav button { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:8px 14px; border-radius:999px; cursor:pointer; font-size:14px; }
+  nav button[aria-selected="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  label { font-weight:600; font-size:14px; }
+  textarea, input[type=text] { width:100%; font:13px/1.5 ui-monospace, Menlo, monospace; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; }
+  textarea { min-height:180px; resize:vertical; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:720px) { .row { grid-template-columns:1fr; } }
+  .opts { display:flex; gap:16px; flex-wrap:wrap; margin:10px 0; font-size:14px; }
+  .btn { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; }
+  .btn.sub { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .note { color:var(--sub); font-size:13px; }
+  .warn { background:var(--chg); border-radius:8px; padding:8px 12px; font-size:13px; margin-top:10px; white-space:pre-wrap; }
+  table { border-collapse:collapse; width:100%; font-size:14px; margin-top:12px; }
+  td, th { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--sub); font-weight:600; width:9em; }
+  code, .mono { font-family:ui-monospace, Menlo, monospace; font-size:13px; }
+  .sec { margin-top:14px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .sec h3 { margin:0; padding:8px 12px; font-size:14px; background:var(--bg); font-family:ui-monospace, Menlo, monospace; overflow-x:auto; white-space:nowrap; }
+  .sec div { padding:4px 12px; font-family:ui-monospace, Menlo, monospace; font-size:13px; white-space:pre-wrap; word-break:break-all; }
+  .add { background:var(--add); } .del { background:var(--del); } .chg { background:var(--chg); }
+  .summary { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .summary span { padding:4px 10px; border-radius:999px; font-size:13px; }
+  footer { margin-top:28px; color:var(--sub); font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>netkit</h1>
+  <p class="lead">ACL を書くときとコンフィグを比べるときの、小さな道具。<strong>計算はすべてこのブラウザの中</strong>で行い、貼った内容はどこにも送信しません。</p>
+
+  <nav role="tablist">
+    <button role="tab" data-tab="wc" aria-selected="true">CIDR → ワイルドカード</button>
+    <button role="tab" data-tab="range">範囲を調べる</button>
+    <button role="tab" data-tab="diff">コンフィグ差分</button>
+  </nav>
+
+  <!-- 1. CIDR → ワイルドカード -->
+  <section class="card" id="tab-wc">
+    <label for="wc-in">ACL などを貼る（<code>a.b.c.d/nn</code> の部分だけを置き換えます）</label>
+    <textarea id="wc-in" spellcheck="false">ip access-list extended FROM-USERS
+ permit tcp 10.10.20.0/24 172.16.0.0/19 eq 443
+ permit ip 10.10.20.0/24 192.168.1.10/32
+ deny   ip any 0.0.0.0/0 log</textarea>
+    <div class="opts">
+      <label><input type="checkbox" id="wc-host"> /32 を <code>host</code> にする</label>
+      <label><input type="checkbox" id="wc-any"> 0.0.0.0/0 を <code>any</code> にする</label>
+      <label><input type="checkbox" id="wc-fix"> ネットワークアドレスでなければ直す</label>
+    </div>
+    <label for="wc-out">結果</label>
+    <textarea id="wc-out" spellcheck="false" readonly></textarea>
+    <div class="opts">
+      <button class="btn" id="wc-copy">結果をコピー</button>
+      <span class="note" id="wc-count"></span>
+    </div>
+    <div class="warn" id="wc-warn" hidden></div>
+  </section>
+
+  <!-- 2. 範囲 -->
+  <section class="card" id="tab-range" hidden>
+    <label for="rg-in">アドレスを入れる</label>
+    <input type="text" id="rg-in" value="172.16.0.0 0.0.31.255" spellcheck="false">
+    <p class="note">例：<code>172.16.0.0 0.0.31.255</code>（ワイルドカード）／ <code>192.168.10.0 255.255.254.0</code>（マスク）／ <code>10.0.0.0/8</code>／ <code>host 10.0.0.1</code></p>
+    <div id="rg-out"></div>
+  </section>
+
+  <!-- 3. 差分 -->
+  <section class="card" id="tab-diff" hidden>
+    <p class="note" style="margin-top:0">行の並び順ではなく、<strong>どのセクションの、どの設定が変わったか</strong>で比べます。Cisco IOS 系（字下げ）と FortiGate（config / edit）に対応。<br>
+    ⚠️ 社外秘の設定を扱うときは、所属先のルールに従ってください。このページは通信しませんが、判断はご自身で。</p>
+    <div class="row">
+      <div><label for="df-a">変更前</label><textarea id="df-a" spellcheck="false"></textarea></div>
+      <div><label for="df-b">変更後</label><textarea id="df-b" spellcheck="false"></textarea></div>
+    </div>
+    <div class="opts">
+      <button class="btn" id="df-run">比べる</button>
+      <button class="btn sub" id="df-sample-ios">例：Cisco</button>
+      <button class="btn sub" id="df-sample-fg">例：FortiGate</button>
+    </div>
+    <div id="df-out"></div>
+  </section>
+
+  <footer>netkit — 入力はブラウザ内でのみ処理されます（このページは通信を禁止する設定で配信しています）。</footer>
+</main>
+
+<script src="netkit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // タブ
+  document.querySelectorAll("nav button").forEach((b) =>
+    b.addEventListener("click", () => {
+      document.querySelectorAll("nav button").forEach((x) => x.setAttribute("aria-selected", x === b));
+      ["wc", "range", "diff"].forEach((t) => ($("tab-" + t).hidden = t !== b.dataset.tab));
+    })
+  );
+
+  // 1. CIDR → ワイルドカード
+  function runWc() {
+    const r = netkit.cidrToWildcard($("wc-in").value, { host: $("wc-host").checked, any: $("wc-any").checked, fixNetwork: $("wc-fix").checked });
+    $("wc-out").value = r.text;
+    $("wc-count").textContent = r.count ? `${r.count}か所を置き換えました` : "CIDR 表記は見つかりませんでした";
+    $("wc-warn").hidden = !r.warnings.length;
+    $("wc-warn").textContent = r.warnings.join("\n");
+  }
+  ["wc-in", "wc-host", "wc-any", "wc-fix"].forEach((id) => $(id).addEventListener("input", runWc));
+  $("wc-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("wc-out").value); $("wc-count").textContent = "コピーしました"; }
+    catch (e) { $("wc-out").select(); document.execCommand("copy"); $("wc-count").textContent = "コピーしました"; }
+  });
+  runWc();
+
+  // 2. 範囲
+  function runRange() {
+    const r = netkit.describeRange($("rg-in").value);
+    if (r.error) { $("rg-out").innerHTML = `<p class="warn">${esc(r.error)}</p>`; return; }
+    const rows = [["読み取り", r.kind]];
+    if (r.discontiguous) {
+      rows.push(["注意", "ワイルドカードが連続していません。連続した範囲ではなく「ビットが一致するアドレス」の集合です"],
+        ["一致する数", r.count.toLocaleString()], ["最小 〜 最大", `${r.first} 〜 ${r.last}`], ["ワイルドカード", r.wildcard]);
+    } else {
+      rows.push(["範囲", `${r.first} 〜 ${r.last}`], ["アドレス数", r.count.toLocaleString()], ["CIDR", r.cidr],
+        ["サブネットマスク", r.mask], ["ワイルドカード", r.wildcard]);
+      if (r.hostBitsSet) rows.push(["注意", `入力はネットワークアドレスではありません（ネットワークは ${r.network}）`]);
+    }
+    $("rg-out").innerHTML = "<table>" + rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="mono">${esc(String(v))}</td></tr>`).join("") + "</table>";
+  }
+  $("rg-in").addEventListener("input", runRange);
+  runRange();
+
+  // 3. 差分
+  const SAMPLES = {
+    ios: [
+`hostname SW-A
+!
+vlan 110
+ name USERS
+!
+interface GigabitEthernet1/0/1
+ description PC
+ switchport access vlan 110
+ switchport mode access
+!
+interface GigabitEthernet1/0/24
+ description UPLINK
+ switchport trunk allowed vlan 110,120
+ switchport mode trunk
+!
+end`,
+`hostname SW-A
+!
+vlan 110
+ name USERS
+!
+vlan 130
+ name PRINTER
+!
+interface GigabitEthernet1/0/24
+ description UPLINK
+ switchport trunk allowed vlan 110,120,130
+ switchport mode trunk
+!
+interface GigabitEthernet1/0/1
+ description PC-2F
+ switchport access vlan 110
+ switchport mode access
+ spanning-tree portfast
+!
+end`],
+    fg: [
+`config firewall address
+    edit "LAN_USERS"
+        set subnet 192.168.10.0 255.255.255.0
+    next
+end
+config firewall policy
+    edit 1
+        set name "LAN-to-WAN"
+        set srcintf "internal"
+        set dstintf "wan1"
+        set action accept
+        set service "ALL"
+        set nat enable
+    next
+end`,
+`config firewall address
+    edit "LAN_USERS"
+        set subnet 192.168.10.0 255.255.255.0
+    next
+    edit "PRINTER"
+        set subnet 192.168.30.10 255.255.255.255
+    next
+end
+config firewall policy
+    edit 1
+        set name "LAN-to-WAN"
+        set srcintf "internal"
+        set dstintf "wan1"
+        set action accept
+        set service "HTTP" "HTTPS" "DNS"
+        set nat enable
+        set logtraffic all
+    next
+end`]
+  };
+  function runDiff() {
+    const d = netkit.diffConfigs($("df-a").value, $("df-b").value);
+    const s = d.summary;
+    let html = `<div class="summary"><span class="chg">形式: ${d.format === "fortigate" ? "FortiGate" : "Cisco IOS 系"}</span>` +
+      `<span class="add">追加 ${s.added}</span><span class="del">削除 ${s.removed}</span><span class="chg">変更 ${s.changed}</span></div>`;
+    if (!d.sections.length) html += `<p class="note">違いはありません（コメント行・空行・並び順は無視しています）。</p>`;
+    for (const sec of d.sections) {
+      html += `<div class="sec"><h3>${esc(sec.section)}</h3>`;
+      for (const c of sec.changed) html += `<div class="chg">~ ${esc(c.from)}\n→ ${esc(c.to)}</div>`;
+      for (const l of sec.removed) html += `<div class="del">- ${esc(l)}</div>`;
+      for (const l of sec.added) html += `<div class="add">+ ${esc(l)}</div>`;
+      html += `</div>`;
+    }
+    $("df-out").innerHTML = html;
+  }
+  $("df-run").addEventListener("click", runDiff);
+  $("df-sample-ios").addEventListener("click", () => { [$("df-a").value, $("df-b").value] = SAMPLES.ios; runDiff(); });
+  $("df-sample-fg").addEventListener("click", () => { [$("df-a").value, $("df-b").value] = SAMPLES.fg; runDiff(); });
+})();
+</script>
+</body>
+</html>

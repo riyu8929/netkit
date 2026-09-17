@@ -114,15 +114,28 @@ t("IOS: 並び順の違いは差分にしない、セクション単位で出す
   const d = nk.diffConfigs(iosA, iosB);
   assert.equal(d.format, "ios");
   const s = Object.fromEntries(d.sections.map((x) => [x.section, x]));
-  assert.deepEqual(s["（トップレベル）"].added, ["vlan 130"]);
-  assert.deepEqual(s["vlan 130"].added, ["name PRINTER"]);
+  // 新しい vlan 130 はトップレベルに重ねて出さず、「vlan 130（新規）」の1か所だけ
+  assert.equal(s["（トップレベル）"], undefined);
+  assert.deepEqual(s["vlan 130（新規）"].added, ["name PRINTER"]);
   assert.deepEqual(s["interface GigabitEthernet1/0/1"].changed, [{ from: "description PC", to: "description PC-2F" }]);
   assert.deepEqual(s["interface GigabitEthernet1/0/1"].added, ["spanning-tree portfast"]);
   assert.deepEqual(s["interface GigabitEthernet1/0/24"].changed, [
     { from: "switchport trunk allowed vlan 110,120", to: "switchport trunk allowed vlan 110,120,130" },
   ]);
   assert.equal(s["hostname SW-A"], undefined);
-  assert.deepEqual(d.summary, { added: 3, removed: 0, changed: 2 });
+  assert.deepEqual(d.summary, { added: 2, removed: 0, changed: 2 });
+});
+
+t("セクションごと消えたときは（削除）を付けて1か所だけ", () => {
+  const d = nk.diffConfigs(iosB, iosA);
+  const s = Object.fromEntries(d.sections.map((x) => [x.section, x]));
+  assert.equal(s["（トップレベル）"], undefined);
+  assert.deepEqual(s["vlan 130（削除）"].removed, ["name PRINTER"]);
+});
+
+t("中身の無いセクションが増えたときは、親に見出しを出す", () => {
+  const d = nk.diffConfigs("hostname A\n", "hostname A\nvlan 999\n");
+  assert.deepEqual(d.sections, [{ section: "（トップレベル）", added: ["vlan 999"], removed: [], changed: [] }]);
 });
 
 t("同じ Config なら差分ゼロ", () => {
@@ -172,12 +185,13 @@ t("FortiGate: edit 単位で追加・変更を出す", () => {
   const d = nk.diffConfigs(fgA, fgB);
   assert.equal(d.format, "fortigate");
   const s = Object.fromEntries(d.sections.map((x) => [x.section, x]));
-  assert.deepEqual(s["config firewall address"].added, ['edit "PRINTER"']);
-  assert.deepEqual(s['config firewall address › edit "PRINTER"'].added, ["set subnet 192.168.30.10 255.255.255.255"]);
+  // 新しい edit は親に重ねて出さず、子のセクション名に（新規）を付けて1か所だけに出す
+  assert.equal(s["config firewall address"], undefined);
+  assert.deepEqual(s['config firewall address › edit "PRINTER"（新規）'].added, ["set subnet 192.168.30.10 255.255.255.255"]);
   const p = s["config firewall policy › edit 1"];
   assert.deepEqual(p.changed, [{ from: 'set service "ALL"', to: 'set service "HTTP" "HTTPS" "DNS"' }]);
   assert.deepEqual(p.added, ["set logtraffic all"]);
-  assert.deepEqual(d.summary, { added: 3, removed: 0, changed: 1 });
+  assert.deepEqual(d.summary, { added: 2, removed: 0, changed: 1 });
 });
 
 console.log(`\n${n}件すべて通過`);

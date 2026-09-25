@@ -38,7 +38,8 @@
   .add { background:var(--add); } .del { background:var(--del); } .chg { background:var(--chg); }
   .summary { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
   .summary span { padding:4px 10px; border-radius:999px; font-size:13px; }
-  footer { margin-top:28px; color:var(--sub); font-size:12px; }
+  footer { margin-top:28px; color:var(--sub); font-size:12px; line-height:1.9; }
+  footer a { color:var(--accent); }
 </style>
 </head>
 <body>
@@ -97,7 +98,10 @@
     <div id="df-out"></div>
   </section>
 
-  <footer>netkit — 入力はブラウザ内でのみ処理されます（このページは通信を禁止する設定で配信しています）。</footer>
+  <footer>
+    netkit — 入力はブラウザ内でのみ処理されます（このページは通信を禁止する設定で配信しています）。<br>
+    この道具を作った経緯 → <a href="https://zenn.dev/riyu8929/articles/netkit-acl-wildcard-config-diff" target="_blank" rel="noopener noreferrer">ChatGPT に同じ計算を8回聞いていたので、ACL とコンフィグ差分の道具をブラウザだけで作った（Zenn）</a>
+  </footer>
 </main>
 
 <script src="netkit.js"></script>
